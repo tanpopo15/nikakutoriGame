@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>二角取りゲーム</title>
+    <style>
+        /* --- CSS --- */
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: sans-serif;
+            background-color: #f0f0f0;
+        }
+
+        #game-board {
+            display: grid;
+            /* JavaScriptでgrid-template-columnsを設定します */
+            border: 4px solid #333;
+            background-color: #5cb85c; /* マットのような色 */
+            margin-top: 20px;
+            padding: 5px;
+            gap: 2px; /* 牌と牌の隙間 */
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .tile {
+            width: 40px;
+            height: 50px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #fff;
+            border: 1px solid #000;
+            border-radius: 4px;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+
+        .tile:hover {
+            transform: scale(1.05);
+        }
+
+        .tile.selected {
+            border: 3px solid red; /* 選択中の牌をハイライト */
+            box-shadow: 0 0 10px red;
+        }
+
+        .tile.empty {
+            background-color: transparent;
+            border: none;
+            cursor: default;
+        }
+
+        #message {
+            margin-top: 20px;
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            min-height: 30px; /* メッセージが表示されない時のレイアウト崩れを防ぐ */
+        }
+
+        #startButton {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>二角取りゲーム</h1>
+    <div id="game-board">
+        </div>
+    <div id="message">ゲーム開始ボタンを押してください。</div>
+    
+    <button id="startButton">ゲーム開始/リセット</button>
+
+    <script>
+        // --- JavaScript ---
+
+        const ROWS = 8;
+        const COLS = 12; // 盤面サイズ
+        const TILE_TYPES = 18; // 牌の種類数
+        const board = [];
+        let selectedTile = null;
+        let tilesRemaining = 0;
+        
+        const boardElement = document.getElementById('game-board');
+        const messageElement = document.getElementById('message');
+        const startButton = document.getElementById('startButton');
+
+        // CSSのグリッド設定をJavaScriptで適用
+        boardElement.style.gridTemplateColumns = `repeat(${COLS}, 1fr)`;
+
+
+        /**
+         * 牌の初期配置
+         */
+        function initializeBoard() {
+            // 牌のリストを生成（ペアにするため、各種類偶数個）
+            let tiles = [];
+            // 各種類2組 (4枚) ずつ、合計 TILE_TYPES * 4 枚の牌を生成
+            for (let i = 1; i <= TILE_TYPES; i++) {
+                tiles.push(i, i, i, i); 
+            }
+            
+            // 盤面サイズに合わせて調整
+            const requiredTiles = ROWS * COLS;
+            if (tiles.length > requiredTiles) {
+                tiles = tiles.slice(0, requiredTiles);
+            } else if (tiles.length < requiredTiles) {
+                // 牌が足りない場合は空きマス(0)で埋める
+                while(tiles.length < requiredTiles) {
+                    tiles.push(0);
+                }
+            }
+
+            // シャッフル（Fisher-Yatesアルゴリズム）
+            for (let i = tiles.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [tiles[i], tiles[j]] = [tiles[j], tiles[i]];
+            }
+
+            // 盤面に配置
+            for (let r = 0; r < ROWS; r++) {
+                board[r] = [];
+                for (let c = 0; c < COLS; c++) {
+                    board[r][c] = tiles[r * COLS + c];
+                }
+            }
+            
+            tilesRemaining = requiredTiles;
+        }
+
+        /**
+         * 盤面をHTMLに描画
+         */
+        function drawBoard() {
+            boardElement.innerHTML = ''; // ボードをクリア
+            
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const tile = document.createElement('div');
+                    tile.className = 'tile';
+                    tile.dataset.row = r;
+                    tile.dataset.col = c;
+                    
+                    if (board[r][c] === 0) {
+                        tile.classList.add('empty');
+                    } else {
+                        // 牌の絵柄を数値で表示
+                        tile.textContent = board[r][c];
+                        tile.onclick = () => handleTileClick(r, c, tile);
+                    }
+                    boardElement.appendChild(tile);
+                }
+            }
+        }
+
+        /**
+         * 牌がクリックされた時の処理
+         */
+        function handleTileClick(r, c, element) {
+            if (board[r][c] === 0) return;
+
+            // 選択中の牌をリセット
+            const resetSelection = () => {
+                if (selectedTile) {
+                    const prevElement = document.querySelector(`.tile[data-row="${selectedTile.r}"][data-col="${selectedTile.c}"]`);
+                    if (prevElement) prevElement.classList.remove('selected');
+                }
+                selectedTile = null;
+            };
+
+            if (!selectedTile) {
+                // 1枚目の選択
+                selectedTile = { r: r, c: c, value: board[r][c], element: element };
+                element.classList.add('selected');
+                messageElement.textContent = '2枚目を選択してください';
+            } else {
+                // 2枚目の選択
+                const r1 = selectedTile.r;
+                const c1 = selectedTile.c;
+                const r2 = r;
+                const c2 = c;
+
+                // 自身を再び選択した場合は選択解除
+                if (r1 === r2 && c1 === c2) {
+                    resetSelection();
+                    messageElement.textContent = 'ペアを選択してください';
+                    return;
+                }
+
+                // 1. 同じ牌であること
+                if (selectedTile.value === board[r2][c2]) {
+                    // 2. 2角以内で繋がっているか判定
+                    if (canConnect(r1, c1, r2, c2)) {
+                        // 消去処理
+                        board[r1][c1] = 0;
+                        board[r2][c2] = 0;
+                        selectedTile.element.classList.add('empty');
+                        element.classList.add('empty');
+                        selectedTile.element.textContent = '';
+                        element.textContent = '';
+                        selectedTile.element.onclick = null;
+                        element.onclick = null;
+                        
+                        tilesRemaining -= 2;
+                        messageElement.textContent = 'OK! ' + tilesRemaining + '枚残り';
+                        
+                        // ゲームクリア判定
+                        if (tilesRemaining === 0) {
+                            messageElement.textContent = 'ゲームクリア！おめでとうございます！';
+                        } else if (!hasValidMoves()) {
+                            messageElement.textContent = '手詰まりです... ゲームオーバー！';
+                        }
+                    } else {
+                        messageElement.textContent = '2角以内で繋がりません。';
+                    }
+                } else {
+                    messageElement.textContent = '絵柄が違います。';
+                }
+                
+                resetSelection(); // 選択をリセット
+            }
+        }
+        
+        /**
+         * 2つの座標 (r1, c1) と (r2, c2) が直線で結べるかを判定
+         */
+        function isStraightPath(r1, c1, r2, c2) {
+            if (r1 === r2) { // 水平
+                const start = Math.min(c1, c2) + 1;
+                const end = Math.max(c1, c2);
+                for (let c = start; c < end; c++) {
+                    if (board[r1][c] !== 0) return false;
+                }
+                return true;
+            } else if (c1 === c2) { // 垂直
+                const start = Math.min(r1, r2) + 1;
+                const end = Math.max(r1, r2);
+                for (let r = start; r < end; r++) {
+                    if (board[r][c1] !== 0) return false;
+                }
+                return true;
+            }
+            return false;
+        }
+
+        /**
+         * 2つの座標 (r1, c1) と (r2, c2) が2角以内で結べるかを判定
+         */
+        function canConnect(r1, c1, r2, c2) {
+            // 0角判定 (隣接含む)
+            if (isStraightPath(r1, c1, r2, c2)) return true;
+
+            // 1角判定 (L字)
+            // 中間点 P1: (r1, c2) が空きマス、または隣接
+            if (board[r1][c2] === 0 || (r1 === r2 && c1 !== c2) || (c1 === c2 && r1 !== r2)) {
+                if (isStraightPath(r1, c1, r1, c2) && isStraightPath(r1, c2, r2, c2)) return true;
+            }
+            // 中間点 P2: (r2, c1) が空きマス、または隣接
+            if (board[r2][c1] === 0 || (r1 === r2 && c1 !== c2) || (c1 === c2 && r1 !== r2)) {
+                if (isStraightPath(r1, c1, r2, c1) && isStraightPath(r2, c1, r2, c2)) return true;
+            }
+
+            // 2角判定 (I型、Z型など) - すべてのマスを中間点として探索
+            
+            // 1. 同じ列c1、c2を通る中間点 (r_mid, c1) -> (r_mid, c2)
+            for (let r_mid = 0; r_mid < ROWS; r_mid++) {
+                // (r_mid, c1) と (r_mid, c2) が空きマスで、かつ r1, r2 と異なる行でない場合
+                if (board[r_mid][c1] === 0 && board[r_mid][c2] === 0) {
+                    if (isStraightPath(r1, c1, r_mid, c1) && isStraightPath(r_mid, c1, r_mid, c2) && isStraightPath(r_mid, c2, r2, c2)) {
+                        return true;
+                    }
+                }
+            }
+
+            // 2. 同じ行r1、r2を通る中間点 (r1, c_mid) -> (r2, c_mid)
+            for (let c_mid = 0; c_mid < COLS; c_mid++) {
+                 // (r1, c_mid) と (r2, c_mid) が空きマスで、かつ c1, c2 と異なる列でない場合
+                if (board[r1][c_mid] === 0 && board[r2][c_mid] === 0) {
+                    if (isStraightPath(r1, c1, r1, c_mid) && isStraightPath(r1, c_mid, r2, c_mid) && isStraightPath(r2, c_mid, r2, c2)) {
+                        return true;
+                    }
+                }
+            }
+            
+            return false;
+        }
+        
+        /**
+         * 手詰まり判定 (消せるペアが存在するかチェック)
+         */
+         function hasValidMoves() {
+            const activeTiles = [];
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    if (board[r][c] !== 0) {
+                        activeTiles.push({ r, c, value: board[r][c] });
+                    }
+                }
+            }
+
+            for (let i = 0; i < activeTiles.length; i++) {
+                for (let j = i + 1; j < activeTiles.length; j++) {
+                    const t1 = activeTiles[i];
+                    const t2 = activeTiles[j];
+                    
+                    if (t1.value === t2.value) {
+                        // canConnectのチェックでは、board配列を参照するため、
+                        // 実際の座標 r, c を渡す必要がある
+                        if (canConnect(t1.r, t1.c, t2.r, t2.c)) {
+                            return true; // 消せるペアが見つかった
+                        }
+                    }
+                }
+            }
+            return false; // 消せるペアがない
+        }
+        
+        /**
+         * ゲーム開始/リセット
+         */
+        function startGame() {
+            initializeBoard();
+            drawBoard();
+            messageElement.textContent = 'ペアを見つけて消してください。';
+            
+            // 初回盤面チェック
+            if (!hasValidMoves()) {
+                messageElement.textContent = '初期盤面に消せるペアがない可能性があります。再生成します...';
+                // 消せるペアができるまで再生成
+                setTimeout(() => {
+                    startGame(); // 再帰的に呼び出し
+                }, 100);
+            }
+        }
+        
+        // --- 修正箇所：ボタンクリックイベントの登録 ---
+        // ページ全体がロードされた後に実行するようにします
+        document.addEventListener('DOMContentLoaded', () => {
+             // スタートボタンにイベントリスナーを追加して、startGame関数を紐づけます
+            startButton.addEventListener('click', startGame);
+            
+            // 初回描画（「ゲーム開始ボタンを押してください」の状態）
+            // startGame()の自動実行は行わず、ユーザーのボタンクリックを待ちます。
+        });
+        
+    </script>
+</body>
+</html>
